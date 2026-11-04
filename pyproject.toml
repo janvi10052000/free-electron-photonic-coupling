@@ -7,7 +7,7 @@ name = "fepc"
 version = "0.1.0"
 description = "Simulation study of free-electron-light coupling in Si and Si3N4 waveguides"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "Janvi" }]
 dependencies = ["numpy", "scipy", "matplotlib", "scikit-learn"]
 
