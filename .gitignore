@@ -1,0 +1,20 @@
+# Python environment and caches
+.venv/
+__pycache__/
+*.egg-info/
+build/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated datasets are not committed
+data/
+
+# Private: never upload
+private_notes/
+CLAUDE.md
+Claude.md
+
+# macOS
+.DS_Store
