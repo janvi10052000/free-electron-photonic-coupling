@@ -4,12 +4,22 @@ Usage: python3 scripts/make_figures.py [--output-dir figures]
 """
 
 import argparse
+from collections.abc import Callable
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import NullFormatter, ScalarFormatter
 
 from fepc.constants import ev_to_joule, joule_to_ev, photon_energy
+from fepc.coupling import phase_matched_kinetic_energy
+from fepc.materials import (
+    air_index,
+    group_index,
+    silica_index,
+    silicon_index,
+    silicon_nitride_index,
+)
 from fepc.pinem import (
     G_AT_P0_ZERO,
     average_over_g,
@@ -18,6 +28,7 @@ from fepc.pinem import (
     sideband_probabilities,
     spectrum,
 )
+from fepc.slab import tm0_cutoff_thickness, tm0_group_index, tm0_mode
 
 # Okabe-Ito colours, chosen to stay distinct with colour-blindness. Line styles differ too.
 COLOURS = ["#0072B2", "#E69F00", "#009E73", "#D55E00"]
@@ -116,10 +127,137 @@ def pinem_averaging_figure() -> plt.Figure:
     return fig
 
 
+# Each platform at 1550 nm: label, core index and substrate index. The top is always air.
+PLATFORMS = [
+    ("Si, air-clad", silicon_index, air_index),
+    ("Si on SiO$_2$", silicon_index, silica_index),
+    ("Si$_3$N$_4$, air-clad", silicon_nitride_index, air_index),
+    ("Si$_3$N$_4$ on SiO$_2$", silicon_nitride_index, silica_index),
+]
+
+
+def _thicknesses(
+    core_index: Callable[[float], float], sub_index: Callable[[float], float]
+) -> np.ndarray:
+    """Thicknesses (m) from 50 nm, or just above cut-off, up to 3 um."""
+    cutoff = tm0_cutoff_thickness(WAVELENGTH, core_index(WAVELENGTH), sub_index(WAVELENGTH))
+    return np.geomspace(max(50e-9, 1.01 * cutoff), 3e-6, 300)
+
+
+def _use_thickness_axis(ax: plt.Axes) -> None:
+    """Label a log axis of film thickness with plain numbers in nm."""
+    ax.set_xscale("log")
+    ax.set_xlim(50.0, 3000.0)
+    ax.set_xticks([50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0])
+    ax.xaxis.set_major_formatter(ScalarFormatter())
+    ax.xaxis.set_minor_formatter(NullFormatter())
+    ax.set_xlabel("Film thickness $t$ (nm)")
+
+
+def materials_dispersion_figure() -> plt.Figure:
+    """How the index and group index of each material change across the telecom band."""
+    wavelength = np.linspace(1500e-9, 1630e-9, 131)
+    materials = [("Si", silicon_index), ("Si$_3$N$_4$", silicon_nitride_index), ("SiO$_2$", silica_index)]
+    fig, (left, right) = plt.subplots(1, 2, figsize=(9.0, 3.8), layout="constrained")
+    for index, (label, material) in enumerate(materials):
+        style = {"color": COLOURS[index], "linestyle": LINE_STYLES[index], "label": label}
+        left.plot(wavelength * 1e9, material(wavelength) - material(WAVELENGTH), **style)
+        n_g = [group_index(material, w) - group_index(material, WAVELENGTH) for w in wavelength]
+        right.plot(wavelength * 1e9, n_g, **style)
+    left.set_ylabel("Change in $n$ from 1550 nm (dimensionless)")
+    right.set_ylabel("Change in $n_g$ from 1550 nm (dimensionless)")
+    for ax in (left, right):
+        ax.set_xlabel("Wavelength (nm)")
+        ax.set_xlim(1500.0, 1630.0)
+        ax.legend()
+    return fig
+
+
+def slab_index_figure() -> plt.Figure:
+    """Mode index and group index of TM0 against film thickness, at 1550 nm."""
+    fig, (left, right) = plt.subplots(1, 2, figsize=(9.0, 3.8), layout="constrained")
+    for index, (label, core, sub) in enumerate(PLATFORMS):
+        thickness = _thicknesses(core, sub)
+        n_eff = [tm0_mode(WAVELENGTH, t, core(WAVELENGTH), sub(WAVELENGTH)).n_eff for t in thickness]
+        n_g = [tm0_group_index(WAVELENGTH, t, core, sub) for t in thickness]
+        style = {"color": COLOURS[index], "linestyle": LINE_STYLES[index], "label": label}
+        left.plot(thickness * 1e9, n_eff, **style)
+        right.plot(thickness * 1e9, n_g, **style)
+    left.set_ylabel(r"Mode index $n_{\rm eff}$ (dimensionless)")
+    right.set_ylabel("Group index $n_g$ (dimensionless)")
+    for ax in (left, right):
+        _use_thickness_axis(ax)
+        ax.legend()
+    return fig
+
+
+def slab_mode_figure() -> plt.Figure:
+    """H_y and |E_z| across an air-clad Si film and an air-clad Si3N4 film, at 1550 nm."""
+    cases = [
+        ("Si, 220 nm", 220e-9, silicon_index),
+        ("Si$_3$N$_4$, 800 nm", 800e-9, silicon_nitride_index),
+    ]
+    fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.8), sharey=True, layout="constrained")
+    for ax, (label, thickness, core) in zip(axes, cases):
+        mode = tm0_mode(WAVELENGTH, thickness, core(WAVELENGTH))
+        x = np.linspace(-1.0e-6, 1.0e-6, 4001)
+        e_z = mode.e_z_magnitude(x)
+        ax.axvspan(-thickness / 2.0 * 1e9, thickness / 2.0 * 1e9, color="0.9", label="Core")
+        ax.plot(x * 1e9, mode.h_y(x), color=COLOURS[0], linestyle=LINE_STYLES[0], label="$H_y$")
+        ax.plot(
+            x * 1e9,
+            e_z / np.max(e_z),
+            color=COLOURS[1],
+            linestyle=LINE_STYLES[1],
+            label="$|E_z|$, scaled to its peak",
+        )
+        ax.set_title(rf"{label}, $n_{{\rm eff}}={mode.n_eff:.3f}$", loc="left")
+        ax.set_xlabel("Position across the film $x$ (nm)")
+        ax.set_xlim(-1000.0, 1000.0)
+    axes[0].set_ylabel("Field, scaled (dimensionless)")
+    axes[0].set_ylim(0.0, 1.3)
+    axes[0].legend(loc="upper center", ncols=3)
+    return fig
+
+
+def phase_matching_figure() -> plt.Figure:
+    """Electron energy that matches the TM0 mode, against film thickness, at 1550 nm."""
+    fig, ax = plt.subplots(figsize=(6.5, 4.2), layout="constrained")
+    ax.axhspan(60.0, 300.0, color="0.92", label="60 to 300 keV")
+    for index, (label, core, sub) in enumerate(PLATFORMS):
+        thickness = _thicknesses(core, sub)
+        n_eff = np.array(
+            [tm0_mode(WAVELENGTH, t, core(WAVELENGTH), sub(WAVELENGTH)).n_eff for t in thickness]
+        )
+        energy_kev = joule_to_ev(phase_matched_kinetic_energy(n_eff)) / 1e3
+        ax.plot(
+            thickness * 1e9,
+            energy_kev,
+            color=COLOURS[index],
+            linestyle=LINE_STYLES[index],
+            label=label,
+        )
+    floor_kev = joule_to_ev(phase_matched_kinetic_energy(silicon_nitride_index(WAVELENGTH))) / 1e3
+    cap_kev = joule_to_ev(phase_matched_kinetic_energy(silica_index(WAVELENGTH))) / 1e3
+    ax.axhline(floor_kev, color="black", linewidth=0.8)
+    ax.axhline(cap_kev, color="black", linewidth=0.8)
+    ax.annotate(f"Si$_3$N$_4$ floor, {floor_kev:.1f} keV", xy=(53.0, floor_kev + 4.0))
+    ax.annotate(f"SiO$_2$ cap, {cap_kev:.1f} keV", xy=(53.0, cap_kev + 4.0))
+    _use_thickness_axis(ax)
+    ax.set_ylabel("Phase-matched kinetic energy $E_k$ (keV)")
+    ax.set_ylim(0.0, 400.0)
+    ax.legend(loc="upper right")
+    return fig
+
+
 FIGURES = {
     "pinem_probabilities": pinem_probabilities_figure,
     "pinem_spectra": pinem_spectra_figure,
     "pinem_averaging": pinem_averaging_figure,
+    "materials_dispersion": materials_dispersion_figure,
+    "slab_index": slab_index_figure,
+    "slab_mode": slab_mode_figure,
+    "phase_matching": phase_matching_figure,
 }
 
 
@@ -131,7 +269,8 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     for name, make_figure in FIGURES.items():
         fig = make_figure()
-        fig.savefig(output_dir / f"{name}.pdf")
+        # No creation date in the PDF, so that regenerating an unchanged figure changes nothing.
+        fig.savefig(output_dir / f"{name}.pdf", metadata={"CreationDate": None})
         fig.savefig(output_dir / f"{name}.png", dpi=300)
         plt.close(fig)
 

@@ -56,6 +56,17 @@ def test_probability_figure_marks_the_zero_of_p0():
     plt.close(fig)
 
 
+@pytest.mark.parametrize(
+    "curve, thickness, energy",
+    [(0, 220.0, 139.3), (1, 220.0, 90.9), (2, 500.0, 164.2), (3, 500.0, 132.2)],
+)
+def test_phase_matching_figure_plots_the_right_platforms(curve, thickness, energy):
+    fig = make_figures.phase_matching_figure()
+    thickness_nm, energy_kev = fig.axes[0].lines[curve].get_data()
+    assert np.interp(thickness, thickness_nm, energy_kev) == pytest.approx(energy, abs=0.3)
+    plt.close(fig)
+
+
 def test_there_is_a_notebook_to_run():
     """Without this, an empty folder would silently skip the test below."""
     assert NOTEBOOKS
