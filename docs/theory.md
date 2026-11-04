@@ -233,3 +233,143 @@ Three further points lie outside this model:
 - [T] A. Feist, Next-Generation Ultrafast Transmission Electron Microscopy – Development and Applications, PhD thesis, Georg-August-University Göttingen (2018). https://doi.org/10.53846/goediss-7028
 
 **Source notes.** Everything attributed to [1] was read in the reproduction of that article in chapter 5 of [T]: Eq. 5.1 (pseudo-Voigt fit), the $A$ written just before Eq. 5.3, Eq. 5.3 ($g$), Eq. 5.15 ($P_N$), section 5.2 (cutoff), sections 5.4.1 and 5.4.2 and Fig. 5.1 (800 nm, 0.7 eV) and section 5.4.6 (averaging). The full text in Nature is paywalled and has not yet been compared. Statements from [4] were read in its arXiv version, arXiv:2105.03729.
+
+## Phase 2: Materials, slab waveguide and phase matching
+
+Phase 1 gives the coupling for any field $E_z(z)$ along the electron's path. Phase 2 finds that field. We need the refractive indices, the guided mode of a thin film, and the electron energy that keeps pace with the mode. Phase 2's tests recompute the numbers below, except values quoted from other sources.
+
+### 2.1 Materials
+
+All three materials use the Sellmeier form, with $\lambda$ and $C_i$ in micrometres:
+
+$$n^2=1+\sum_i\frac{B_i\lambda^2}{\lambda^2-C_i^2}$$
+
+| Material | $B_i$ | $C_i$ | Valid range | $n$ at 1550 nm | $n_g$ at 1550 nm |
+|---|---|---|---|---|---|
+| Si, 26 °C [SV, Ta] | 10.6684293, 0.0030434748, 1.54133408 | 0.301516485, 1.13475115, 1104 | 1.357 to 11.04 μm | 3.4777 | 3.6053 |
+| Si₃N₄ [10] | 3.0249, 40314 | 0.1353406, 1239.842 | 0.310 to 5.504 μm | 1.9963 | 2.0396 |
+| SiO₂, 20 °C [Ma] | 0.6961663, 0.4079426, 0.8974794 | 0.0684043, 0.1162414, 9.896161 | 0.21 to 3.71 μm | 1.4440 | 1.4626 |
+
+The whole band of 1500 to 1630 nm lies inside all three ranges. The group index of a bulk material is $n_g=n-\lambda dn/d\lambda$.
+
+- **Silicon's formula** is a fit by Tatian [Ta] to the data of Salzberg and Villa [SV], as listed on refractiveindex.info. It has no measured point at 1550 nm itself. Their nearest points are at 1529.5 and 1660.6 nm, where the formula agrees with their table to better than $10^{-4}$.
+- **How well these are known.** Other data sets differ by more than the digits above suggest. Li [Li] gives 3.4757 for Si at 293 K and a group index of about 3.60, against 3.4777 and 3.6053 here at 26 °C. About half of the gap in $n$ is the 6 K difference. Henke et al. [4] measured 1.9923 on their own Si₃N₄ film, against 1.9963 here. So the third decimal of $n_{\rm eff}$ is not physically meaningful.
+
+### 2.2 The TM slab waveguide
+
+A core of thickness $t$ and index $n_1$ lies on a substrate of index $n_s$, with a top cladding of index $n_t$. The mode travels along $z$, and the layers are stacked along $x$. Nothing varies along $y$. The electron flies along $z$ at height $d$ above the top surface, so it couples only to $E_z$. A TE mode of a slab has $E_z=0$, so we need TM modes.
+
+In a real channel waveguide the modes are only quasi-TE or quasi-TM. Any mode with $E_z$ along the beam then couples, and [6] finds that the lowest-order quasi-TM mode usually couples most strongly.
+
+**The wave equation.** Take $H_y(x)e^{i(k_zz-\omega t)}$, with $k_z=n_{\rm eff}k_0$ and $k_0=2\pi/\lambda$. Ampère's law gives
+
+$$E_x=\frac{k_z}{\omega\epsilon_0\epsilon_r}H_y,\qquad E_z=\frac{i}{\omega\epsilon_0\epsilon_r}\partial_xH_y$$
+
+and Faraday's law then gives the equation for $H_y$:
+
+$$\partial_x\left(\frac{1}{\epsilon_r}\partial_xH_y\right)+\left(k_0^2-\frac{k_z^2}{\epsilon_r}\right)H_y=0$$
+
+**The guidance condition.** In the core $H_y$ oscillates with $k_x=k_0\sqrt{n_1^2-n_{\rm eff}^2}$. Outside it decays with $\kappa_i=k_0\sqrt{n_{\rm eff}^2-n_i^2}$, for $i=s,t$. At each face both $H_y$ and $E_z$ must be continuous, which means $H_y$ and $\partial_xH_y/\epsilon_r$. Measuring $x'$ from the substrate face, the core field is $\cos(k_xx'-\phi_s)$, and matching at each face gives
+
+$$\tan\phi_i=\frac{n_1^2}{n_i^2}\frac{\kappa_i}{k_x}$$
+
+The phase accumulated across the core must fit both faces. For the fundamental mode,
+
+$$\boxed{k_xt=\phi_s+\phi_t}$$
+
+Each higher mode adds $\pi$ to the right side. For a symmetric slab $\phi_s=\phi_t$, which gives $\tan(k_xt/2)=(n_1^2/n_2^2)(\kappa/k_x)$, with $n_2$ the index of both claddings and $\kappa$ their decay rate.
+
+**Solving it.** The code uses the boxed form rather than the tangent, which has poles that can trap a root finder on the wrong mode. The left side minus the right side falls steadily with $n_{\rm eff}$ and, above cut-off, changes sign exactly once between the highest cladding index and $n_1$. So Brent's method, which needs only a sign change and always converges, finds the one root. At fixed indices the same equation also gives $t$ directly from $n_{\rm eff}$, with no root finding.
+
+**An independent check.** `tm0_finite_difference` never uses the guidance condition. It discretizes the wave equation directly, as an eigenvalue problem whose largest eigenvalue is $n_{\rm eff}^2$. Both faces fall halfway between grid points. There $1/\epsilon_r$ is replaced by $2/(\epsilon_j+\epsilon_{j+1})$, which keeps $\partial_xH_y/\epsilon_r$ continuous, so the error falls as the square of the step.
+
+| Air-clad slab (air on both sides), $\lambda=1550$ nm | Si, 220 nm | Si, 300 nm | Si, 400 nm | Si₃N₄, 400 nm | Si₃N₄, 800 nm |
+|---|---|---|---|---|---|
+| $n_1$ held fixed at | 3.476 | 3.476 | 3.476 | 1.996 | 1.996 |
+| $n_{\rm eff}$ | 1.61491 | 2.47823 | 2.93118 | 1.35496 | 1.79250 |
+
+**Limits.** For a symmetric air-clad slab, $n_{\rm eff}-1\to(k_0t)^2(1-1/n_1^2)^2/8$ as $t\to0$, and $n_1-n_{\rm eff}\to\lambda^2/(8n_1t^2)$ as $t\to\infty$. Both follow from the guidance condition, by taking $k_xt/2$ small and then close to $\pi/2$.
+
+**Cut-off.** A symmetric slab always guides TM₀. An asymmetric one does not: $n_{\rm eff}$ must stay above $n_s$, so the mode disappears at the thickness where $n_{\rm eff}=n_s$ in the guidance condition. On SiO₂ at 1550 nm this is 103.3 nm for Si and 223.8 nm for Si₃N₄. Close to cut-off the mode lies almost entirely in the substrate, so a real, finite oxide layer would matter there.
+
+**Higher modes.** We follow TM₀ only, but TM₁ also exists in thicker films. On an air-clad slab it is guided above $t=\lambda/(2\sqrt{n_1^2-1})$, which is 232.7 nm for Si and 448.6 nm for Si₃N₄.
+
+**Fields.** With $H_y=1$ A/m at the core centre, the field above the top surface is
+
+$$\lvert E_z(d)\rvert=\frac{\kappa_t}{\omega\epsilon_0n_t^2}H_{\rm top}e^{-\kappa_td},\qquad H_{\rm top}=\frac{\cos\phi_t}{\cos[(\phi_t-\phi_s)/2]}$$
+
+where $H_{\rm top}$ is $H_y$ at the top face. For a symmetric air-clad slab this is $(\kappa/\omega\epsilon_0)\cos(k_xt/2)e^{-\kappa d}$. That simpler form must not be carried over to a substrate: there it overestimates $\lvert E_z\rvert$ by a factor of 1.6 to 2.0 for the thicknesses in the table.
+
+**Power.** The cycle-averaged flow along $z$ is $\frac{1}{2}\mathrm{Re}(E_xH_y^\ast)$. The $\frac{1}{2}$ belongs to the peak-amplitude convention of section 1.1. Integrating across the layers gives the power per unit width,
+
+$$P'=\frac{k_z}{2\omega\epsilon_0}\int\frac{\lvert H_y\rvert^2}{\epsilon_r}dx$$
+
+**Group index.** At fixed $t$, including the change of every layer's index with wavelength,
+
+$$n_g=n_{\rm eff}-\lambda\frac{dn_{\rm eff}}{d\lambda}$$
+
+The code takes this derivative by a central difference with a step of 0.1 nm. The tests check it by a second route, $n_g=cU/P'$, with $U$ the energy stored per unit length:
+
+$$U=\frac{1}{4}\int\left[\epsilon_0D\left(\lvert E_x\rvert^2+\lvert E_z\rvert^2\right)+\mu_0\lvert H_y\rvert^2\right]dx,\qquad D=n^2-2n\lambda\frac{dn}{d\lambda}$$
+
+These two routes also test $P'$ against $U$, since a factor wrong in only one of them would show up in the ratio. The group index is not monotonic in $t$: it runs from 1 for a very thin air-clad slab, overshoots the bulk value, and only slowly settles back. For air-clad Si it peaks at 5.18 near $t=246$ nm, against 3.61 in bulk.
+
+### 2.3 Phase matching
+
+**The condition.** The electron stays in step with the wave when its speed equals the phase velocity of the mode [4, 6]. This uses the phase index $n_{\rm eff}$, not the group index:
+
+$$v=\frac{c}{n_{\rm eff}},\qquad\beta=\frac{1}{n_{\rm eff}},\qquad E_k=mc^2(\gamma-1)$$
+
+| $n_{\rm eff}$ | 1.615 | 1.793 | 2.000 | 2.478 |
+|---|---|---|---|---|
+| $E_k$ (keV) | 139.8 | 104.6 | 79.1 | 47.5 |
+
+**The decay length.** At phase matching $n_{\rm eff}=1/\beta$, so in air $\kappa=k_0\sqrt{n_{\rm eff}^2-1}=k_0/(\beta\gamma)$. Therefore
+
+$$\frac{1}{\kappa}=\frac{\beta\gamma\lambda}{2\pi}$$
+
+which is 142 nm for $n_{\rm eff}=2$ at 1550 nm, 123 nm at 60 keV and 304 nm at 300 keV. In a slab it depends only on the electron and the wavelength, not on the film. This is the same $\kappa=\omega/(\gamma v)$ as in section 1.8. Refs [4, 6] do not state this form, so it is derived here.
+
+**Mismatch.** For a uniform mode $E_z=E_0e^{ik_zz}$ over a length $L$, the integral for $g$ in section 1.2 gives
+
+$$\lvert g\rvert=\frac{e\lvert E_0\rvert}{2\hbar\omega}L\left\lvert\mathrm{sinc}\frac{\Delta kL}{2}\right\rvert,\qquad\Delta k=\frac{\omega}{c}\left(\frac{1}{\beta}-n_{\rm eff}\right)$$
+
+Refs [4, 6] give the overlap integral, not this closed form, which holds for a straight guide with sharp ends. Three notes on notation:
+
+- The integrand in $g$ goes as $e^{-i\Delta kz}$, so this $\Delta k$ is minus the $\Delta$ of section 1.8. The sign does not affect $\lvert g\rvert$.
+- Ref [4] uses $\Delta k$ for $\omega/v$ alone, which is a different quantity.
+- NumPy's `sinc(y)` is $\sin(\pi y)/(\pi y)$, so the code passes $\Delta kL/(2\pi)$.
+
+**Which energies each platform can reach.** TM₀ has $n_{\rm eff}$ below $n_1$, and above the highest cladding index. At 1550 nm this limits each platform:
+
+| Platform, TM₀ | Reachable $E_k$ in our range of 60 to 300 keV | Thickness |
+|---|---|---|
+| Si, air-clad | 60 to 300 keV | 271.2 nm to 191.3 nm |
+| Si on SiO₂ | 60 to 197.3 keV | 257.0 nm to 103.3 nm (cut-off) |
+| Si₃N₄, air-clad | 79.4 to 300 keV | no upper limit (100 keV at 874.8 nm) to 365.5 nm |
+| Si₃N₄ on SiO₂ | 79.4 to 197.3 keV | no upper limit (100 keV at 804.5 nm) to 223.8 nm (cut-off) |
+
+- **The floor** of 79.4 keV is where $n_{\rm eff}$ would reach the core index of Si₃N₄, so only an infinitely thick film gets there.
+- **The cap** of 197.3 keV is where $n_{\rm eff}$ would fall to the index of SiO₂. Above it the electron moves faster than the phase velocity of light in silica, which is the Cherenkov regime that [6] describes, where substrate modes take over. So above 197.3 keV, of these four platforms only the air-clad films can match TM₀.
+
+**A rough comparison with a real design.** Henke et al. [4] design a Si₃N₄ ring of 20 μm radius, with a cross-section of 2 μm by 650 nm, air above and SiO₂ below, for 115 keV near 1550 nm, by a finite-element calculation. Our slab with their indices (1.9923 and 1.4440) and $t=650$ nm gives $n_{\rm eff}=1.7502$ and 111.6 keV. A finite width lowers $n_{\rm eff}$ and raises the energy, so the slab is off in the expected direction, but the ring's curvature also shifts the match. So this is only a rough check, and only of $n_{\rm eff}$.
+
+### 2.4 What is assumed
+
+- The film is infinite along $y$, which Phase 3 corrects only through a width $w$ in the power. The comparison above tests only $n_{\rm eff}$, so only the matching energy. It does not test $\lvert E_z\rvert^2/P$: a real guide's field peaks on the centre line, so dividing by $w$ underestimates it, by a factor of up to 2 for a cosine profile across the width. All of this gets worse for narrower guides.
+- Only TM₀ is followed, although the thicker films in section 2.3 also guide TM₁.
+- The layers are lossless, with sharp flat faces, and the substrate is infinitely thick.
+- The waveguide is straight and uniform along $z$.
+- Si is at 26 °C and SiO₂ at 20 °C, with no temperature stated for [10], and the indices differ between films (section 2.1).
+
+### References for Phase 2
+
+- [4] As listed under Phase 1.
+- [6] G. Huang, N. J. Engelsen, O. Kfir, C. Ropers and T. J. Kippenberg, Electron-Photon Quantum State Heralding Using Photonic Integrated Circuits, PRX Quantum **4**, 020351 (2023). https://doi.org/10.1103/PRXQuantum.4.020351
+- [10] K. Luke, Y. Okawachi, M. R. E. Lamont, A. L. Gaeta and M. Lipson, Broadband mid-infrared frequency comb generation in a Si₃N₄ microresonator, Opt. Lett. **40**, 4823–4826 (2015). https://doi.org/10.1364/OL.40.004823
+- [SV] C. D. Salzberg and J. J. Villa, Infrared Refractive Indexes of Silicon Germanium and Modified Selenium Glass, J. Opt. Soc. Am. **47**, 244–246 (1957). https://doi.org/10.1364/JOSA.47.000244
+- [Ta] B. Tatian, Fitting refractive-index data with the Sellmeier dispersion formula, Appl. Opt. **23**, 4477–4485 (1984). https://doi.org/10.1364/AO.23.004477
+- [Ma] I. H. Malitson, Interspecimen Comparison of the Refractive Index of Fused Silica, J. Opt. Soc. Am. **55**, 1205 (1965). https://doi.org/10.1364/JOSA.55.001205
+- [Li] H. H. Li, Refractive index of silicon and germanium and its wavelength and temperature derivatives, J. Phys. Chem. Ref. Data **9**, 561–658 (1980). https://doi.org/10.1063/1.555624
+
+**Source notes.** The Si₃N₄ coefficients were read from the refractiveindex.info entry for [10]. The full text of [10] was not accessible, so they have not been compared with the paper, and neither has its statement of the wavelength range. The SiO₂ coefficients agree with the abstract of [Ma]. The Si coefficients agree with the Table III row of [Ta], which gives one more digit for the second strength. That digit changes $n$ at 1550 nm by about $10^{-11}$. The numbers quoted from [4] are from the published version; its arXiv version gives a width of 2.2 μm and no indices. The statements from [6] were read in arXiv:2206.08098 and in the published version.
